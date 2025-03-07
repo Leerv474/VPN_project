@@ -1,0 +1,33 @@
+# Build files
+/build/
+*.o
+*.a
+*.so
+*.exe
+*.out
+
+# CMake and Makefile artifacts
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# IDE & Editor files
+.vscode/
+*.swp
+*.swo
+*.swn
+.idea/
+*.iml
+
+# Logs and Debugging
+*.log
+*.pid
+*.stackdump
+
+# System-specific
+.DS_Store
+Thumbs.db
+
+# Dependencies (if any)
+vendor/
