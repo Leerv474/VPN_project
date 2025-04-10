@@ -12,7 +12,7 @@
 
 VpnClient::VpnClient(const std::string& clientIp, const std::string& clientMask, const std::string& serverIp, int serverPort,
                      const std::string& tunDeviceName) {
-    this->tunDevice = std::make_unique<TunDevice>(tunDeviceName, clientIp, clientMask, this->tunDeviceName);
+    this->tunDevice = std::make_unique<TunDevice>(tunDeviceName, clientIp, clientMask, tunDeviceName);
     this->serverFd = createServerSocket(serverIp, serverPort);
     setNonBlocking(this->tunDevice->getFd());
     setNonBlocking(this->serverFd);

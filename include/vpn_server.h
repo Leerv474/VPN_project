@@ -4,7 +4,7 @@
 
 class VpnServer {
     public:
-        VpnServer(const std::string& tunName, int port, size_t bufferSize);
+        VpnServer(const std::string& tunName, const std::string& virtualIp, const std::string& netmask, int port, const std::string& networkDevice, size_t bufferSize);
         ~VpnServer();
 
         void start();
@@ -22,7 +22,10 @@ class VpnServer {
         int epollFd = -1;
 
         std::string tunName;
+        std::string virtualIp;
+        std::string netmask;
         int port;
+        std::string networkDevice;
         size_t bufferSize;
         bool keepAlive = true;
 

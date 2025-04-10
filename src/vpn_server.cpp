@@ -1,4 +1,5 @@
 #include "../include/vpn_server.h"
+#include "../include/vpn_tunnel.h"
 #include <arpa/inet.h>
 #include <cstring>
 #include <fcntl.h>
@@ -13,8 +14,11 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-VpnServer::VpnServer(const std::string& tunName, int port, size_t bufferSize) {
+VpnServer::VpnServer(const std::string& tunName, const std::string& virtualIp, const std::string& netmask, int port, const std::string& networkDevice, size_t bufferSize) {
     this->tunName = tunName;
+    this->virtualIp = virtualIp;
+    this->networkDevice = networkDevice;
+    this->netmask = netmask;
     this->port = port;
     this->bufferSize = bufferSize;
     this->buffer = std::make_unique<char[]>(bufferSize);
@@ -54,23 +58,8 @@ void VpnServer::stop() {
 }
 
 void VpnServer::setupTun() {
-    struct ifreq ifr = {};
-    this->tunFd = open("/dev/net/tun", O_RDWR);
-    if (this->tunFd < 0) {
-        perror("Failed to open tun interface");
-        throw std::runtime_error("Cannot open /dev/net/tun");
-    }
-
-    ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
-    strncpy(ifr.ifr_name, tunName.c_str(), IFNAMSIZ);
-
-    if (ioctl(this->tunFd, TUNSETIFF, &ifr) < 0) {
-        close(this->tunFd);
-        this->tunFd = -1;
-        perror("Failed to configure TUN device");
-        throw std::runtime_error("Failed to configure TUN device");
-    }
-    fcntl(this->tunFd, F_SETFL, fcntl(this->tunFd, F_GETFL, 0) | O_NONBLOCK);
+    TunDevice tunDevice(this->tunName, virtualIp, this->netmask, this->networkDevice);
+    this->tunFd = tunDevice.getFd();
 }
 
 void VpnServer::setupServerSocket() {
