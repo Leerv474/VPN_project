@@ -1,9 +1,9 @@
+#pragma once
 #include <iostream>
 
 class TunDevice {
   public:
-    TunDevice(const std::string& devName, const std::string& deviceIp, const std::string& netmask,
-              const std::string& networkDevice);
+    TunDevice(const std::string& tunName, const std::string& tunIp, const int tunNetmask);
     ~TunDevice();
 
     ssize_t readPacket(char* buffer, size_t bufSize);
@@ -11,9 +11,13 @@ class TunDevice {
     int getFd() const;
 
   private:
-    std::string deviceName;
+    std::string tunName;
     int tunFd;
-    std::string deviceIp;
+    std::string tunIp;
+    int tunNetmask;
 
-    bool configure(const std::string& deviceIp, const std::string& netmask, const std::string& networkDevice);
+    bool configure(const std::string& tunIp, const int tunNetmask);
+    bool removeIpTablesRules();
+    std::string getDefaultInterface();
+    std::string calculateNetworkAddress(const std::string& ipStr, int prefixLength);
 };

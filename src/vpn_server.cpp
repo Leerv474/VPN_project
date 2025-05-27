@@ -1,151 +1,85 @@
 #include "../include/vpn_server.h"
-#include "../include/vpn_tunnel.h"
-#include <arpa/inet.h>
 #include <cstring>
-#include <fcntl.h>
-#include <linux/if.h>
-#include <linux/if_tun.h>
-#include <memory>
-#include <netinet/in.h>
-#include <stdexcept>
-#include <string>
-#include <sys/epoll.h>
-#include <sys/ioctl.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#include <map>
+#include <vector>
 
-VpnServer::VpnServer(const std::string& tunName, const std::string& virtualIp, const std::string& netmask, int port, const std::string& networkDevice, size_t bufferSize) {
-    this->tunName = tunName;
-    this->virtualIp = virtualIp;
-    this->networkDevice = networkDevice;
-    this->netmask = netmask;
-    this->port = port;
-    this->bufferSize = bufferSize;
-    this->buffer = std::make_unique<char[]>(bufferSize);
-    this->keepAlive = true;
+VpnServer::VpnServer(const std::string& tunName, const std::string& tunIp, int tunNetmask, int port, size_t bufferSize,
+                     std::map<std::string, std::string>& peersMap, std::string privateKey)
+    : socket(), tunDevice(tunName, tunIp, tunNetmask), epollManager(), sessionManager(), buffer(bufferSize),
+      bufferSize(bufferSize) {
+    socket.bind("0.0.0.0", port);
+    socket.setNonBlocking();
+
+    epollManager.addFd(socket.getFd(), EPOLLIN);
+    epollManager.addFd(tunDevice.getFd(), EPOLLIN);
 }
 
-VpnServer::~VpnServer() {
-    if (this->tunFd != -1) {
-        close(this->tunFd);
-        this->tunFd = -1;
-    }
-    if (this->serverSocketFd != -1) {
-        close(this->serverSocketFd);
-    }
-    if (this->clientFd != -1) {
-        close(this->clientFd);
-    }
-    if (this->epollFd != -1) {
-        close(this->epollFd);
-    }
+VpnServer::~VpnServer() { stop(); }
+
+void VpnServer::start() {
+    keepAlive = true;
+    eventLoop();
 }
 
-void VpnServer::stop() {
-    this->keepAlive = false;
-    if (this->tunFd != -1) {
-        close(this->tunFd);
-    }
-    if (this->serverSocketFd != -1) {
-        close(this->serverSocketFd);
-    }
-    if (this->clientFd != -1) {
-        close(this->clientFd);
-    }
-    if (this->epollFd != -1) {
-        close(this->epollFd);
-    }
-}
-
-void VpnServer::setupTun() {
-    TunDevice tunDevice(this->tunName, virtualIp, this->netmask, this->networkDevice);
-    this->tunFd = tunDevice.getFd();
-}
-
-void VpnServer::setupServerSocket() {
-    this->serverSocketFd = socket(AF_INET, SOCK_STREAM, 0);
-    if (this->serverSocketFd < 0) {
-        perror("Failed to create socket");
-        throw std::runtime_error("Failed to create socket");
-    }
-
-    int opt = -1;
-    setsockopt(this->serverSocketFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-    sockaddr_in addr = {};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = INADDR_ANY;
-
-    if (bind(this->serverSocketFd, (sockaddr*)&addr, sizeof(addr)) < 0 || listen(this->serverSocketFd, 1) < 0) {
-        close(this->serverSocketFd);
-        perror("Failed to bind or listen");
-        throw std::runtime_error("Failed to bind or listen");
-    }
-}
-
-void VpnServer::acceptClient() {
-    sockaddr_in clientAddr = {};
-    socklen_t len = sizeof(clientAddr);
-    this->clientFd = accept(this->serverSocketFd, (sockaddr*)&clientAddr, &len);
-    if (this->clientFd < 0) {
-        perror("Failed to accept client");
-        throw std::runtime_error("Failed to accept client");
-    }
-    fcntl(this->clientFd, F_SETFL, fcntl(this->clientFd, F_GETFL, 0) | O_NONBLOCK);
-}
+void VpnServer::stop() { keepAlive = false; }
 
 void VpnServer::eventLoop() {
-    this->epollFd = epoll_create1(0);
-    if (this->epollFd < 0) {
-        perror("Failed to create epoll instance");
-        throw std::runtime_error("Failed to create epoll instance");
-    }
+    constexpr int MAX_EVENTS = 10;
+    epoll_event events[MAX_EVENTS];
 
-    epoll_event serverEv = {EPOLLIN, {.fd = this->tunFd}};
-    epoll_event clientEv = {EPOLLIN | EPOLLRDHUP, {.fd = this->clientFd}};
+    while (keepAlive) {
+        int n = epollManager.wait(events, MAX_EVENTS, -1);
 
-    if (epoll_ctl(this->epollFd, EPOLL_CTL_ADD, this->tunFd, &serverEv) < 0 ||
-        epoll_ctl(this->epollFd, EPOLL_CTL_ADD, this->clientFd, &clientEv) < 0) {
-        perror("Failed to add file descriptors to epoll");
-        throw std::runtime_error("Failed to add file descriptors to epoll");
-    }
+        for (int i = 0; i < n; ++i) {
+            int fd = events[i].data.fd;
 
-    while (this->keepAlive) {
-        epoll_event events[2];
-        int nfds = epoll_wait(this->epollFd, events, 2, -1);
-        if (nfds < 0) {
-            perror("epoll_wait");
-            continue;
-        }
-
-        for (int i = 0; i < nfds; ++i) {
-            if (events[i].data.fd == this->tunFd) {
-                ssize_t nread = read(this->tunFd, this->buffer.get(), this->bufferSize);
-                if (nread > 0) {
-                    if (send(this->clientFd, this->buffer.get(), nread, 0) < 0) {
-                        perror("send to client");
-                    }
-                } else {
-                    perror("read from tun");
-                }
-            } else if (events[i].data.fd == this->clientFd) {
-                if (events[i].events & EPOLLRDHUP) {
-                    perror("client disconnected");
-                    this->keepAlive = false;
-                    break;
-                }
-                ssize_t nrecv = recv(this->clientFd, this->buffer.get(), this->bufferSize, 0);
-                if (nrecv > 0) {
-                    if (write(this->tunFd, this->buffer.get(), nrecv) < 0) {
-                        perror("write to tun");
-                    }
-                } else if (nrecv == 0) {
-                    perror("client disconnected");
-                    this->keepAlive = false;
-                } else {
-                    perror("recv from client");
-                }
+            if (fd == tunDevice.getFd()) {
+                handleTunRead();
+            } else if (fd == socket.getFd()) {
+                handleUdpRead();
             }
         }
     }
+}
+
+void VpnServer::handleUdpRead() {
+    std::string clientIp;
+    uint16_t clientPort;
+    ssize_t bytes = socket.recvFrom(buffer.data(), bufferSize, clientIp, clientPort);
+    if (bytes <= 0)
+        return;
+
+    if (bytes < 20) {
+        std::cerr << "Packet too small for IPv4 header\n";
+        return;
+    }
+
+    uint32_t rawSrcIp = *reinterpret_cast<uint32_t*>(buffer.data() + 12); // IPv4 dst field
+    auto session = sessionManager.getOrCreateSession(rawSrcIp, clientIp, clientPort);
+
+    session->updateLastActivity();
+
+    // Decrypt here if needed (stub for now)
+
+    tunDevice.writePacket(buffer.data(), bytes);
+}
+
+void VpnServer::handleTunRead() {
+    ssize_t bytes = tunDevice.readPacket(buffer.data(), bufferSize);
+    if (bytes <= 0)
+        return;
+
+    uint32_t rawDstIp = *reinterpret_cast<uint32_t*>(buffer.data() + 16); // IPv4 dst field
+
+    auto session = sessionManager.findSessionByVpnIp(rawDstIp);
+    if (!session) {
+        std::cout << "Failed to find session " << rawDstIp << " Sized at: " << bytes << '\n';
+        return;
+    }
+
+    session->updateLastActivity();
+
+    // Encrypt here if needed (stub for now)
+
+    socket.sendTo(buffer.data(), bytes, session->getIp(), session->getPort());
 }

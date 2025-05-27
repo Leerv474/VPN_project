@@ -1,6 +1,9 @@
-#include "../include/vpn_client.h"
+#include "../include/cli.h"
 #include <iostream>
 
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
+    Cli cli = Cli(argc, argv);
+    cli.startCli();
+    return 0;
 }

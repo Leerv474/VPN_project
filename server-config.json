@@ -1,0 +1,14 @@
+{
+  "type": "server",
+  "interface": {
+    "address": "10.0.1.1/24",
+    "listen_port": 5555,
+    "private_key": "SERVER_PRIVATE_KEY"
+  },
+  "peers": [
+    {
+      "allowed_ip": "10.0.1.2/24",
+      "public_key": "CLIENT_PUBLIC_KEY"
+    }
+  ]
+}

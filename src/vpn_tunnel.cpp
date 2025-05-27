@@ -1,9 +1,13 @@
+#include <arpa/inet.h>
+#include <cstdint>
 #include <cstring>
 #include <fcntl.h>
 #include <iostream>
 #include <linux/if.h>
 #include <linux/if_tun.h>
+#include <netinet/in.h>
 #include <stdexcept>
+#include <string>
 #include <sys/ioctl.h>
 #include <unistd.h>
 
@@ -12,9 +16,8 @@
 #define TUN_DEVICE "/dev/net/tun"
 #define BUFFER_SIZE 2048
 
-TunDevice::TunDevice(const std::string& devName, const std::string& deviceIp, const std::string& netmask,
-                     const std::string& networkDevice)
-    : deviceName(devName), tunFd(-1) {
+TunDevice::TunDevice(const std::string& tunName, const std::string& tunIp, const int tunNetmask)
+    : tunName(tunName), tunFd(-1), tunNetmask(tunNetmask) {
     struct ifreq ifr; // interface request structure
     memset(&ifr, 0, sizeof(ifr));
     this->tunFd = open(TUN_DEVICE, O_RDWR);
@@ -25,7 +28,7 @@ TunDevice::TunDevice(const std::string& devName, const std::string& deviceIp, co
     }
 
     ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
-    strncpy(ifr.ifr_name, deviceName.c_str(), IFNAMSIZ - 1);
+    strncpy(ifr.ifr_name, tunName.c_str(), IFNAMSIZ - 1);
     ifr.ifr_name[IFNAMSIZ - 1] = '\0';
 
     if (ioctl(this->tunFd, TUNSETIFF, &ifr) < 0) {
@@ -33,39 +36,83 @@ TunDevice::TunDevice(const std::string& devName, const std::string& deviceIp, co
         throw std::runtime_error("Failed to configure TUN device");
     }
 
-    if (!configure(deviceIp, netmask, networkDevice)) {
+    if (!configure(tunIp, tunNetmask)) {
         close(this->tunFd);
         throw std::runtime_error("Tun device configuration failed");
     }
 
-    std::cout << "TUN device " << deviceName << " created successfully\n";
+    std::cout << "TUN device " << tunName << " created successfully\n";
 }
 
 TunDevice::~TunDevice() {
+    if (!this->removeIpTablesRules()) {
+        std::cerr << "WARNING: failed to remove iptables rules\n";
+    }
     if (this->tunFd >= 0) {
         close(this->tunFd);
-        std::cout << "TUN device " << deviceName << " closed successfully\n";
+        std::cout << "TUN device " << tunName << " closed successfully\n";
     }
 }
 
-bool TunDevice::configure(const std::string& deviceIp, const std::string& netmask, const std::string& networkDevice) {
-    const std::string ipSetupCmd = "ip addr add " + deviceIp + "/" + netmask + " dev " + this->deviceName;
-    const std::string linkSetCmd = "ip link set dev " + this->deviceName + " up";
-    const std::string ipForwardingCmd = "sysctl -w net.ipv4.ip_forward=1";
-    const std::string natSetupCmd =
-        "iptables -t nat -A POSTROUTING -s " + deviceIp + "/" + netmask + "-o " + networkDevice + " -j MASQUERADE";
-    const std::string ipRoutingCmd = "ip route add " + deviceIp + "/" + netmask + " dev " + this->deviceName;
+std::string TunDevice::calculateNetworkAddress(const std::string& ipStr, int prefixLength) {
+    in_addr ipAddr;
+    if (inet_pton(AF_INET, ipStr.c_str(), &ipAddr) != 1) {
+        throw std::runtime_error("Invalid IP");
+    }
+    uint32_t ip = ntohl(ipAddr.s_addr);
 
-    if (system(ipSetupCmd.c_str()) != 0)
+    uint32_t mask = prefixLength == 0 ? 0 : (~0U << (32 - prefixLength));
+
+    uint32_t network = ip & mask;
+
+    in_addr networkAddr;
+    networkAddr.s_addr = htonl(network);
+
+    char buf[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &networkAddr, buf, sizeof(buf));
+    return std::string(buf);
+}
+
+bool TunDevice::configure(const std::string& tunIp, const int tunNetmask) {
+    std::string networkBase = calculateNetworkAddress(tunIp, tunNetmask);
+    const std::string ipSetupCmd = "ip addr add " + tunIp + "/" + std::to_string(tunNetmask) + " dev " + this->tunName;
+    const std::string disableIpv6Cmd  = "sysctl -w net.ipv6.conf." + this->tunName + ".disable_ipv6=1";
+    const std::string linkSetCmd = "ip link set dev " + this->tunName + " up";
+    const std::string ipForwardingCmd = "sysctl -w net.ipv4.ip_forward=1";
+    const std::string forwardingSetupCmd = "iptables -A FORWARD -i vpn_test -j ACCEPT";
+    const std::string natSetupCmd = "iptables -t nat -A POSTROUTING -s " + networkBase + "/" + std::to_string(tunNetmask) + " -o " +
+                                    this->getDefaultInterface() + " -j MASQUERADE";
+    const std::string ipRoutingCmd = "ip route replace " + networkBase + "/" + std::to_string(tunNetmask) + " dev " + this->tunName;
+
+
+    if (system(ipSetupCmd.c_str()) != 0) {
+        std::cout << "CONFIGURATION FAILED: " << ipSetupCmd << '\n';
         return false;
-    if (system(linkSetCmd.c_str()) != 0)
+    }
+    if (system(disableIpv6Cmd.c_str()) != 0) {
+        std::cout << "CONFIGURATION FAILED: " << disableIpv6Cmd << '\n';
         return false;
-    if (system(ipForwardingCmd.c_str()) != 0)
+    }
+    if (system(linkSetCmd.c_str()) != 0) {
+        std::cout << "CONFIGURATION FAILED: " << linkSetCmd<< '\n';
         return false;
-    if (system(natSetupCmd.c_str()) != 0)
+    }
+    if (system(ipForwardingCmd.c_str()) != 0) {
+        std::cout << "CONFIGURATION FAILED: " << ipForwardingCmd << '\n';
         return false;
-    if (system(ipRoutingCmd.c_str()) != 0)
+    }
+    if (system(forwardingSetupCmd.c_str()) != 0) {
+        std::cout << "CONFIGURATION FAILED: " << forwardingSetupCmd << '\n';
         return false;
+    }
+    if (system(natSetupCmd.c_str()) != 0) {
+        std::cout << "CONFIGURATION FAILED: " << natSetupCmd << '\n';
+        return false;
+    }
+    if (system(ipRoutingCmd.c_str()) != 0) {
+        std::cout << "CONFIGURATION FAILED: " << ipRoutingCmd << '\n';
+        return false;
+    }
 
     return true;
 }
@@ -95,9 +142,39 @@ ssize_t TunDevice::writePacket(const char* buffer, size_t bufSize) {
 
     ssize_t nwrite = write(this->tunFd, buffer, bufSize);
     if (nwrite < 0) {
-        perror("Failed to read TUN device");
+        perror("Failed to write TUN device");
         return -1;
     }
 
     return nwrite;
+}
+
+std::string TunDevice::getDefaultInterface() {
+    FILE* fp = popen("ip route | grep default | awk '{print $5}'", "r");
+    if (!fp)
+        return "eth0";
+
+    char buf[64];
+    if (fgets(buf, sizeof(buf), fp)) {
+        buf[strcspn(buf, "\n")] = '\0';
+        pclose(fp);
+        return std::string(buf);
+    }
+
+    pclose(fp);
+    return "eth0";
+}
+
+bool TunDevice::removeIpTablesRules() {
+    std::string disablePostroutingRules = "iptables -t nat -D POSTROUTING -o " + this->getDefaultInterface() + " -j MASQUERADE";
+    std::string disableForwardingRules = "iptables -D FORWARD -i " + this->tunName + " -j ACCEPT;";
+    if (system(disableForwardingRules.c_str()) != 0) {
+        std::cout << "CONFIGURATION FAILED: " << disableForwardingRules << '\n';
+        return false;
+    }
+    if (system(disablePostroutingRules.c_str()) != 0) {
+        std::cout << "CONFIGURATION FAILED: " << disablePostroutingRules<< '\n';
+        return false;
+    }
+    return true;
 }

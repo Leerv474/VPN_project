@@ -1,21 +1,29 @@
 #pragma once
-#include "../include/vpn_tunnel.h"
 #include <iostream>
-#include <memory>
+#include <string>
+#include <vector>
+
+#include "epoll_manager.h"
+#include "udp_socket.h"
+#include "vpn_tunnel.h"
 
 class VpnClient {
   public:
-    VpnClient(const std::string& clientIp, const std::string& clientMask, const std::string& serverIp, int serverPort, const std::string& tunDeviceName);
-    ~VpnClient();
+    VpnClient(const std::string& tunName, const std::string& tunIp, const int tunNetmask,
+              const std::string& serverIp, uint16_t serverPort, size_t bufferSize);
 
-    void runEventLoop();
-
+    void eventLoop();
   private:
-    int createServerSocket(const std::string& ip, int port);
-    void setNonBlocking(int fd);
 
-    std::unique_ptr<TunDevice> tunDevice;
-    int serverFd;
-    const std::string tunDeviceName = "vpn";
-    const int bufferSize = 2048;
+    void handleRead();
+    void handleSend();
+
+    UdpSocket socket;
+    TunDevice tunDevice;
+    EpollManager epollManager;
+
+    std::string serverIp;
+    uint16_t serverPort;
+
+    std::vector<char> buffer;
 };

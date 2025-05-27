@@ -1,0 +1,53 @@
+services:
+  vpn_server:
+    container_name: vpn_server
+    build: .
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+      - NET_RAW
+    devices:
+      - "/dev/net/tun:/dev/net/tun"
+    privileged: true
+    volumes:
+      - ./server-config.json:/app/config.json
+    command: /bin/sh -c "./vpn config /app/config.json && ./vpn run"
+    ports:
+    - "5555:5555/udp"
+    stdin_open: true
+    tty: true
+    networks:
+      vpn_net:
+        ipv4_address: 172.28.0.10
+    # sysctls:
+    #   net.ipv6.conf.all.disable_ipv6: 1
+    #   net.ipv6.conf.default.disable_ipv6: 1
+
+  vpn_client:
+    container_name: vpn_client
+    build: .
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+      - NET_RAW
+    devices:
+      - "/dev/net/tun:/dev/net/tun"
+    privileged: true
+    volumes:
+      - ./client-config.json:/app/config.json
+    command: /bin/sh -c "./vpn config /app/config.json && ./vpn run"
+    stdin_open: true
+    tty: true
+    networks:
+      vpn_net:
+        ipv4_address: 172.28.0.20
+    # sysctls:
+    #   net.ipv6.conf.all.disable_ipv6: 1
+    #   net.ipv6.conf.default.disable_ipv6: 1
+
+networks:
+  vpn_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

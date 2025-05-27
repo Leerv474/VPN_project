@@ -1,33 +1,41 @@
 #pragma once
+#include "../include/epoll_manager.h"
+#include "../include/session_manager.h"
+#include "../include/udp_socket.h"
+#include "../include/vpn_tunnel.h"
 #include <iostream>
 #include <memory>
+#include <sys/types.h>
+#include <map>
+#include <vector>
 
 class VpnServer {
-    public:
-        VpnServer(const std::string& tunName, const std::string& virtualIp, const std::string& netmask, int port, const std::string& networkDevice, size_t bufferSize);
-        ~VpnServer();
+  public:
+    VpnServer(const std::string& tunName, const std::string& tunIp, const int tunNetmask, int port,
+              size_t bufferSize, std::map<std::string, std::string>& peersMap, std::string privateKey);
+    ~VpnServer();
 
-        void start();
-        void stop();
+    VpnServer(const VpnServer&) = delete;
+    VpnServer& operator=(const VpnServer&) = delete;
+    VpnServer(VpnServer&&) = default;
+    VpnServer& operator=(VpnServer&&) = default;
 
-    private:
-        void setupTun();
-        void setupServerSocket();
-        void acceptClient();
-        void eventLoop();
+    void start();
+    void stop();
 
-        int tunFd = -1;
-        int serverSocketFd = -1;
-        int clientFd = -1;
-        int epollFd = -1;
+  private:
+    void eventLoop();
+    void handleTunRead();
+    void handleUdpRead();
+    void acceptClient();
 
-        std::string tunName;
-        std::string virtualIp;
-        std::string netmask;
-        int port;
-        std::string networkDevice;
-        size_t bufferSize;
-        bool keepAlive = true;
+    UdpSocket socket;
+    TunDevice tunDevice;
+    EpollManager epollManager;
+    SessionManager sessionManager;
 
-        std::unique_ptr<char[]> buffer;
+    std::vector<char> buffer;
+    size_t bufferSize;
+
+    bool keepAlive = false;
 };
