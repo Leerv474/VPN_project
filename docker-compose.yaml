@@ -19,12 +19,9 @@ services:
     networks:
       vpn_net:
         ipv4_address: 172.28.0.10
-    # sysctls:
-    #   net.ipv6.conf.all.disable_ipv6: 1
-    #   net.ipv6.conf.default.disable_ipv6: 1
 
-  vpn_client:
-    container_name: vpn_client
+  vpn_client1:
+    container_name: vpn_client1
     build: .
     cap_add:
       - NET_ADMIN
@@ -34,16 +31,32 @@ services:
       - "/dev/net/tun:/dev/net/tun"
     privileged: true
     volumes:
-      - ./client-config.json:/app/config.json
+      - ./client-config-1.json:/app/config.json
     command: /bin/sh -c "./vpn config /app/config.json && ./vpn run"
     stdin_open: true
     tty: true
     networks:
       vpn_net:
         ipv4_address: 172.28.0.20
-    # sysctls:
-    #   net.ipv6.conf.all.disable_ipv6: 1
-    #   net.ipv6.conf.default.disable_ipv6: 1
+
+  vpn_client2:
+    container_name: vpn_client2
+    build: .
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+      - NET_RAW
+    devices:
+      - "/dev/net/tun:/dev/net/tun"
+    privileged: true
+    volumes:
+      - ./client-config-2.json:/app/config.json
+    command: /bin/sh -c "./vpn config /app/config.json && ./vpn run"
+    stdin_open: true
+    tty: true
+    networks:
+      vpn_net:
+        ipv4_address: 172.28.0.30
 
 networks:
   vpn_net:

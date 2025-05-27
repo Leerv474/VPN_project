@@ -1,6 +1,4 @@
 #include "../include/session_manager.h"
-#include <cstdint>
-#include <iostream>
 
 std::shared_ptr<Session> SessionManager::getOrCreateSession(uint32_t rawVpnIp, const std::string& ip, uint16_t port) {
     std::lock_guard<std::mutex> lock(mutex);

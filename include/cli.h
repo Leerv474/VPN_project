@@ -2,6 +2,14 @@
 #include <iostream>
 #include <map>
 #include "../include/util.h"
+#include "../include/configuration_parser.h"
+#include "../include/vpn_client.h"
+#include "../include/vpn_server.h"
+#include <filesystem>
+#include <fstream>
+#include <stdexcept>
+#include <string>
+
 
 class Cli {
   public:

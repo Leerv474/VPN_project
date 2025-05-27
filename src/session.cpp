@@ -1,6 +1,4 @@
 #include "../include/session.h"
-#include <chrono>
-#include <cstdint>
 
 Session::Session(const std::string& ip, uint16_t port) {
     this->deviceIp = ip;

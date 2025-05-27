@@ -1,20 +1,6 @@
-#include <arpa/inet.h>
-#include <cstdint>
-#include <cstring>
-#include <fcntl.h>
-#include <iostream>
-#include <linux/if.h>
-#include <linux/if_tun.h>
-#include <netinet/in.h>
-#include <stdexcept>
-#include <string>
-#include <sys/ioctl.h>
-#include <unistd.h>
-
 #include "../include/vpn_tunnel.h"
 
 #define TUN_DEVICE "/dev/net/tun"
-#define BUFFER_SIZE 2048
 
 TunDevice::TunDevice(const std::string& tunName, const std::string& tunIp, const int tunNetmask)
     : tunName(tunName), tunFd(-1), tunNetmask(tunNetmask) {

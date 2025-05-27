@@ -8,6 +8,9 @@
 #include <sys/types.h>
 #include <map>
 #include <vector>
+#include <cstring>
+#include <map>
+#include <vector>
 
 class VpnServer {
   public:

@@ -1,10 +1,4 @@
 #include "../include/epoll_manager.h"
-#include <cstdio>
-#include <cstring>
-#include <stdexcept>
-#include <sys/epoll.h>
-#include <sys/types.h>
-#include <unistd.h>
 
 EpollManager::EpollManager() {
     this->epollFd = epoll_create1(0);

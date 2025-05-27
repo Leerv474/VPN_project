@@ -3,6 +3,11 @@
 #include <sys/epoll.h>
 #include <sys/types.h>
 #include <vector>
+#include <cstdio>
+#include <stdexcept>
+#include <sys/epoll.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 class EpollManager {
   private:

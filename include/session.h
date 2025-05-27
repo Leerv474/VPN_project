@@ -2,6 +2,8 @@
 
 #include <string>
 #include <chrono>
+#include <chrono>
+#include <cstdint>
 
 class Session {
 public:

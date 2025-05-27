@@ -1,7 +1,4 @@
 #include "../include/vpn_server.h"
-#include <cstring>
-#include <map>
-#include <vector>
 
 VpnServer::VpnServer(const std::string& tunName, const std::string& tunIp, int tunNetmask, int port, size_t bufferSize,
                      std::map<std::string, std::string>& peersMap, std::string privateKey)

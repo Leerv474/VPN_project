@@ -1,5 +1,18 @@
 #pragma once
 #include <iostream>
+#include <arpa/inet.h>
+#include <cstdint>
+#include <cstring>
+#include <fcntl.h>
+#include <iostream>
+#include <linux/if.h>
+#include <linux/if_tun.h>
+#include <netinet/in.h>
+#include <stdexcept>
+#include <string>
+#include <sys/ioctl.h>
+#include <unistd.h>
+
 
 class TunDevice {
   public:

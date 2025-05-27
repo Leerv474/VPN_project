@@ -4,6 +4,7 @@ FROM ubuntu:22.04
 RUN apt update && apt install -y \
     build-essential \
     cmake \
+    libssl-dev \
     nlohmann-json3-dev \
     iproute2 iputils-ping net-tools \
     libstdc++6 \
