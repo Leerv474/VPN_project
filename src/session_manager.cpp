@@ -11,10 +11,8 @@ std::shared_ptr<Session> SessionManager::getOrCreateSession(uint32_t rawVpnIp, c
 
     auto newSession = std::make_shared<Session>(ip, port);
     sessions[rawVpnIp] = newSession;
-    std::cout << "Created new session " << rawVpnIp << ' ' << ip << ':' << port << '\n';
     return newSession;
 }
-
 std::shared_ptr<Session> SessionManager::findSessionByVpnIp(const uint32_t rawVpnIp) {
     std::lock_guard<std::mutex> lock(mutex);
     auto it = sessions.find(rawVpnIp);

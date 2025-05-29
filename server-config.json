@@ -3,12 +3,16 @@
   "interface": {
     "address": "10.0.1.1/24",
     "listen_port": 5555,
-    "private_key": "SERVER_PRIVATE_KEY"
+    "private_key": "MC4CAQAwBQYDK2VwBCIEIB810xc3SJ7IBEQgs5wUgFotIc4NPljfOI+a+ro0Ymxj"
   },
   "peers": [
     {
-      "allowed_ip": "10.0.1.2/24",
-      "public_key": "CLIENT_PUBLIC_KEY"
+      "allowed_ip": "10.0.1.2",
+      "public_key": "MCowBQYDK2VwAyEAJAjuQTC3VSj/tCfo7pcPQHZ/ZXEeR4i6v7d/49ePnBY="
+    },
+    {
+      "allowed_ip": "10.0.1.3",
+      "public_key": "MCowBQYDK2VwAyEAHZXUr817yJqxQvyUoxJNOe/dgMxij8D2liVYMCrsE8w="
     }
   ]
 }

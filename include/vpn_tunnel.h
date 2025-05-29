@@ -19,8 +19,8 @@ class TunDevice {
     TunDevice(const std::string& tunName, const std::string& tunIp, const int tunNetmask);
     ~TunDevice();
 
-    ssize_t readPacket(char* buffer, size_t bufSize);
-    ssize_t writePacket(const char* buffer, size_t bufSize);
+    ssize_t readPacket(uint8_t* buffer, size_t bufSize);
+    ssize_t writePacket(const uint8_t* buffer, size_t bufSize);
     int getFd() const;
 
   private:

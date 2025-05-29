@@ -19,9 +19,9 @@ class UdpSocket {
     void bind(const std::string& bindIp, uint16_t bindPort);
     void setNonBlocking();
 
-    ssize_t sendTo(char* buffer, size_t bufferSize, const std::string& destIp, uint16_t destPort);
+    ssize_t sendTo(uint8_t* buffer, size_t bufferSize, const std::string& destIp, uint16_t destPort);
 
-    ssize_t recvFrom(char* buffer, size_t bufferSize, std::string& srcIp, uint16_t& srcPort);
+    ssize_t recvFrom(uint8_t* buffer, size_t bufferSize, std::string& srcIp, uint16_t& srcPort);
 
     int getFd() const;
 

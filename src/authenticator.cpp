@@ -1,59 +1,101 @@
 #include "../include/authenticator.h"
 
-Authenticator::Authenticator(const std::string& privateKeyPath, const std::string& publicKeyPath) {
-    if (!privateKeyPath.empty()) loadPrivateKey(privateKeyPath);
-    if (!publicKeyPath.empty()) loadPublicKey(publicKeyPath);
+Authenticator::Authenticator(const std::string& privateKeyPem) { loadPrivateKey(privateKeyPem); }
+
+Authenticator::~Authenticator() {
+    if (privateKey)
+        EVP_PKEY_free(privateKey);
 }
 
-void Authenticator::loadPrivateKey(const std::string& path) {
-    FILE* fp = fopen(path.c_str(), "r");
-    if (!fp) throw std::runtime_error("Unable to open private key file");
-    privateKey = PEM_read_PrivateKey(fp, nullptr, nullptr, nullptr);
-    fclose(fp);
-    if (!privateKey) throw std::runtime_error("Failed to load private key");
+void Authenticator::loadPrivateKey(const std::string& privateKeyBase64) {
+    auto keyBytes = base64Decode(privateKeyBase64);
+    const unsigned char* ptr = keyBytes.data();
+
+    privateKey = d2i_AutoPrivateKey(nullptr, &ptr, keyBytes.size());
+    if (!privateKey)
+        throw std::runtime_error("Failed to parse DER Ed25519 private key");
 }
 
-void Authenticator::loadPublicKey(const std::string& path) {
-    FILE* fp = fopen(path.c_str(), "r");
-    if (!fp) throw std::runtime_error("Unable to open public key file");
-    publicKey = PEM_read_PUBKEY(fp, nullptr, nullptr, nullptr);
-    fclose(fp);
-    if (!publicKey) throw std::runtime_error("Failed to load public key");
+std::vector<uint8_t> Authenticator::base64Decode(const std::string& base64) {
+    BIO* bio = BIO_new_mem_buf(base64.c_str(), -1);
+    BIO* b64 = BIO_new(BIO_f_base64());
+    bio = BIO_push(b64, bio);
+    BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL); // Handle single-line Base64
+
+    std::vector<uint8_t> buffer;
+    const int chunkSize = 512;
+    std::vector<uint8_t> temp(chunkSize);
+
+    int len;
+    while ((len = BIO_read(bio, temp.data(), chunkSize)) > 0) {
+        buffer.insert(buffer.end(), temp.begin(), temp.begin() + len);
+    }
+
+    BIO_free_all(bio);
+
+    if (buffer.empty()) {
+        throw std::runtime_error("Base64 decode failed or produced no data");
+    }
+    return buffer;
+}
+
+EVP_PKEY* Authenticator::loadPublicKey(const std::string& publicKeyBase64) {
+    auto keyBytes = base64Decode(publicKeyBase64);
+    const unsigned char* ptr = keyBytes.data();
+
+    EVP_PKEY* pkey = d2i_PUBKEY(nullptr, &ptr, keyBytes.size());
+    if (!pkey)
+        throw std::runtime_error("Failed to parse DER Ed25519 public key");
+
+    return pkey;
 }
 
 std::vector<uint8_t> Authenticator::generateChallenge(size_t size) {
     std::vector<uint8_t> challenge(size);
-    if (!RAND_bytes(challenge.data(), size)) {
-        throw std::runtime_error("Failed to generate random challenge");
-    }
+    std::random_device rd;
+    std::generate(challenge.begin(), challenge.end(), std::ref(rd));
     return challenge;
 }
 
 std::vector<uint8_t> Authenticator::signChallenge(const std::vector<uint8_t>& challenge) {
-    if (!privateKey) throw std::runtime_error("Private key not loaded");
+    size_t sigLen = 0;
+    std::vector<uint8_t> signature(EVP_PKEY_size(privateKey));
 
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-    EVP_SignInit(ctx, EVP_sha256());
-    EVP_SignUpdate(ctx, challenge.data(), challenge.size());
+    if (!ctx)
+        throw std::runtime_error("Failed to create MD context");
 
-    std::vector<uint8_t> signature(EVP_PKEY_size(privateKey));
-    unsigned int sigLen;
-    EVP_SignFinal(ctx, signature.data(), &sigLen, privateKey);
+    if (EVP_DigestSignInit(ctx, nullptr, nullptr, nullptr, privateKey) <= 0) {
+        EVP_MD_CTX_free(ctx);
+        throw std::runtime_error("EVP_DigestSignInit failed");
+    }
+
+    sigLen = signature.size();
+    if (EVP_DigestSign(ctx, signature.data(), &sigLen, challenge.data(), challenge.size()) <= 0) {
+        EVP_MD_CTX_free(ctx);
+        throw std::runtime_error("EVP_DigestSign failed");
+    }
+
     signature.resize(sigLen);
-
     EVP_MD_CTX_free(ctx);
     return signature;
 }
 
-bool Authenticator::verifyChallenge(const std::vector<uint8_t>& challenge, const std::vector<uint8_t>& signature) {
-    if (!publicKey) throw std::runtime_error("Public key not loaded");
+bool Authenticator::verifyChallenge(const std::string& publicKeyStr, const std::vector<uint8_t>& challenge,
+                                    const std::vector<uint8_t>& signature) {
+    std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> publicKey(loadPublicKey(publicKeyStr), EVP_PKEY_free);
 
     EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-    EVP_VerifyInit(ctx, EVP_sha256());
-    EVP_VerifyUpdate(ctx, challenge.data(), challenge.size());
+    if (!ctx)
+        throw std::runtime_error("Failed to create MD context");
 
-    int result = EVP_VerifyFinal(ctx, signature.data(), signature.size(), publicKey);
+    if (EVP_DigestVerifyInit(ctx, nullptr, nullptr, nullptr, publicKey.get()) <= 0) {
+        EVP_MD_CTX_free(ctx);
+        throw std::runtime_error("EVP_DigestVerifyInit failed");
+    }
+
+    int ret = EVP_DigestVerify(ctx, signature.data(), signature.size(), challenge.data(), challenge.size());
     EVP_MD_CTX_free(ctx);
-    return result == 1;
-}
 
+    return ret == 1;
+}

@@ -2,11 +2,11 @@
   "type": "client",
   "interface": {
     "address": "10.0.1.2/24",
-    "private_key": "CLIENT_PRIVATE_KEY"
+    "private_key": "MC4CAQAwBQYDK2VwBCIEIDxzIZCsGU3D8SnffWfOO5mE/8mOjrK3dAzJLoBrSZAA"
   },
   "peer": {
     "endpoint": "172.28.0.10:5555",
     "allowed_ips": "0.0.0.0/0",
-    "public_key": "SERVER_PUBLIC_KEY"
+    "public_key": "MCowBQYDK2VwAyEAsYSz5s8y2KtZmFV4qebX7gBL+P4tb6HQ2vn8iEp7nkg="
   }
 }

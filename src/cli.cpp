@@ -1,10 +1,11 @@
 #include "../include/cli.h"
 
 Cli::Cli(int argc, char* argv[]) {
-    if (argc <= 1) {
-        std::runtime_error("no arguments given... type help\n");
+    if (argc == 1) {
+        std::cerr << "no arguments given... type help\n";
+        return;
     }
-    this->option = argv[1];
+    this->option = (argc > 1) ? argv[1] : "";
     this->argument = (argc > 2) ? argv[2] : "";
 }
 
@@ -21,6 +22,12 @@ void Cli::startCli() {
         this->run();
         return;
     }
+    if (option == "help") {
+        std::cout << this->helpCmd << '\n';
+        return;
+    }
+
+    std::cout << "unknown argument... type help\n";
 }
 
 void Cli::setConfigPath(const std::string& configFilePath) {
@@ -43,7 +50,16 @@ void Cli::setConfigPath(const std::string& configFilePath) {
     out.close();
 }
 
-void Cli::generateEncryptionKeys() { std::cout << "Did you really think I did it?\n"; }
+void Cli::generateEncryptionKeys() {
+    std::pair<std::string, std::string> keys;
+    keys = util.generateKeyPairBase64();
+    if (keys.first.empty() || keys.second.empty()) {
+        std::cerr << "Failed to generate keys.\n";
+        return;
+    }
+    std::cout << "Private Key:\n" << keys.first << "\n";
+    std::cout << "Public Key:\n" << keys.second<< "\n";
+}
 
 void Cli::startServer(std::map<std::string, std::string>& interfaceMap, std::map<std::string, std::string>& peersMap) {
     std::string address = interfaceMap["address"];
@@ -76,9 +92,11 @@ void Cli::startClient(std::map<std::string, std::string>& interfaceMap, std::map
     int tunMask = splitAddress.second;
     std::string serverIp = splitEndpoint.first;
     uint16_t serverPort = splitEndpoint.second;
+    std::string privateKey = interfaceMap["private_key"];
+    std::string serverPublicKey = peerMap["public_key"];
 
     try {
-        VpnClient client(tunName, tunIp, tunMask, serverIp, serverPort, 1500);
+        VpnClient client(tunName, tunIp, tunMask, serverIp, serverPort, 1500, privateKey, serverPublicKey);
         client.eventLoop();
     } catch (const std::exception& e) {
         std::cerr << "Failed to start VPN client: " << e.what() << std::endl;

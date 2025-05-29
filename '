@@ -5,12 +5,13 @@
 #include <stdexcept>
 #include <thread>
 #include <vector>
+#include <iomanip>
 
 VpnClient::VpnClient(const std::string& tunName, const std::string& tunIp, const int tunNetmask,
                      const std::string& serverIp, uint16_t serverPort, size_t bufferSize, const std::string& privateKey,
                      const std::string& serverPublicKey)
-    : serverIp(serverIp), serverPort(serverPort), buffer(bufferSize), bufferSize(bufferSize),
-      tunDevice(tunName, tunIp, tunNetmask), serverPublicKey(serverPublicKey), authenticator(privateKey), tunIp(tunIp) {
+    : serverIp(serverIp), serverPort(serverPort), buffer(bufferSize), tunDevice(tunName, tunIp, tunNetmask),
+      serverPublicKey(serverPublicKey), authenticator(privateKey), tunIp(tunIp) {
 
     socket.bind("0.0.0.0", 0);
     epollManager.addFd(tunDevice.getFd(), EPOLLIN);
@@ -23,14 +24,12 @@ void VpnClient::eventLoop() {
 
     std::this_thread::sleep_for(std::chrono::seconds(1));
 
-    std::vector<uint8_t> generatedChallenge = authenticator.generateChallenge();
-    this->challenge = generatedChallenge;
+    challenge = authenticator.generateChallenge();
     uint32_t vpnIp = inet_addr(this->tunIp.c_str());
-    generatedChallenge.insert(generatedChallenge.begin(), reinterpret_cast<uint8_t*>(&vpnIp),
-                              reinterpret_cast<uint8_t*>(&vpnIp) + sizeof(vpnIp));
-    generatedChallenge.insert(generatedChallenge.begin(), static_cast<uint8_t>(MessageType::CLIENT_CHALLENGE));
-    ssize_t nsend =
-        socket.sendTo(generatedChallenge.data(), generatedChallenge.size(), this->serverIp, this->serverPort);
+    challenge.insert(challenge.begin(), reinterpret_cast<uint8_t*>(&vpnIp),
+                           reinterpret_cast<uint8_t*>(&vpnIp) + sizeof(vpnIp));
+    challenge.insert(challenge.begin(), static_cast<uint8_t>(MessageType::CLIENT_CHALLENGE));
+    ssize_t nsend = socket.sendTo(challenge.data(), challenge.size(), this->serverIp, this->serverPort);
 
     if (nsend <= 0) {
         std::runtime_error("Failed to send authentication challenge");
@@ -52,25 +51,22 @@ void VpnClient::eventLoop() {
 }
 
 void VpnClient::handleRead() {
-    buffer.resize(this->bufferSize);
     ssize_t len = tunDevice.readPacket(buffer.data(), buffer.size());
     if (len > 0) {
         buffer.insert(buffer.begin(), static_cast<uint8_t>(MessageType::VPN_PACKET));
-        ssize_t nsend = socket.sendTo(buffer.data(), len + 1, serverIp, serverPort);
+        socket.sendTo(buffer.data(), len, serverIp, serverPort);
     }
+    // std::cout << "[TUN] Read " << len << " bytes, sending to server " << serverIp << ":" << serverPort << std::endl;
 }
 
 void VpnClient::handleSend() {
     std::string srcIp;
     uint16_t srcPort;
-    buffer.resize(bufferSize);
     ssize_t nrecv = socket.recvFrom(buffer.data(), buffer.size(), srcIp, srcPort);
     uint32_t vpnIp;
-    ssize_t len;
     if (nrecv > 0) {
         MessageType type = static_cast<MessageType>(buffer[0]);
         std::vector<uint8_t> payload(buffer.begin() + 1, buffer.begin() + nrecv);
-
         switch (type) {
         case MessageType::SERVER_RESPONSE:
             if (!authenticator.verifyChallenge(serverPublicKey, this->challenge, payload)) {
@@ -88,10 +84,7 @@ void VpnClient::handleSend() {
             socket.sendTo(buffer.data(), buffer.size(), this->serverIp, this->serverPort);
             break;
         case MessageType::VPN_PACKET:
-            len = tunDevice.writePacket(payload.data(), nrecv);
-            if (len <= 0) {
-                std::cout << "Failed to write data to TUN\n";
-            }
+            tunDevice.writePacket(payload.data(), nrecv);
             break;
         default:
             std::cout << "Unknown package type\n";

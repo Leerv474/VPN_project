@@ -1,4 +1,5 @@
 #include "../include/vpn_tunnel.h"
+#include <cstdint>
 
 #define TUN_DEVICE "/dev/net/tun"
 
@@ -105,7 +106,7 @@ bool TunDevice::configure(const std::string& tunIp, const int tunNetmask) {
 
 int TunDevice::getFd() const { return this->tunFd; }
 
-ssize_t TunDevice::readPacket(char* buffer, size_t bufSize) {
+ssize_t TunDevice::readPacket(uint8_t* buffer, size_t bufSize) {
     if (this->tunFd < 0) {
         perror("Unable to read packet, TUN device isn't open");
         return -1;
@@ -120,7 +121,7 @@ ssize_t TunDevice::readPacket(char* buffer, size_t bufSize) {
     return nread;
 }
 
-ssize_t TunDevice::writePacket(const char* buffer, size_t bufSize) {
+ssize_t TunDevice::writePacket(const uint8_t* buffer, size_t bufSize) {
     if (this->tunFd < 0) {
         perror("Unable to write packet, TUN device isn't open");
         return -1;

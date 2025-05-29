@@ -1,4 +1,5 @@
 #include "../include/udp_socket.h"
+#include <cstdint>
 
 UdpSocket::UdpSocket() {
     this->socketFd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -51,7 +52,7 @@ void UdpSocket::setNonBlocking() {
 
 int UdpSocket::getFd() const { return this->socketFd; }
 
-ssize_t UdpSocket::sendTo(char* buffer, size_t bufferSize, const std::string& destIp, uint16_t destPort) {
+ssize_t UdpSocket::sendTo(uint8_t* buffer, size_t bufferSize, const std::string& destIp, uint16_t destPort) {
     sockaddr_in destAddr{};
     destAddr.sin_family = AF_INET;
     destAddr.sin_port = htons(destPort);
@@ -65,7 +66,7 @@ ssize_t UdpSocket::sendTo(char* buffer, size_t bufferSize, const std::string& de
     return sentBytes;
 }
 
-ssize_t UdpSocket::recvFrom(char* buffer, size_t bufferSize, std::string& srcIp, uint16_t& srcPort) {
+ssize_t UdpSocket::recvFrom(uint8_t* buffer, size_t bufferSize, std::string& srcIp, uint16_t& srcPort) {
     sockaddr_in srcAddr{};
     socklen_t addrLen = sizeof(srcAddr);
 

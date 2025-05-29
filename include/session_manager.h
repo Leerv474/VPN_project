@@ -18,5 +18,6 @@ public:
 
 private:
     std::unordered_map<uint32_t, std::shared_ptr<Session>> sessions;
+    std::unordered_map<uint32_t, bool> sessionStatus;
     std::mutex mutex;
 };

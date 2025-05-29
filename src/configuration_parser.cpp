@@ -1,4 +1,5 @@
 #include "../include/configuration_parser.h"
+#include <iostream>
 
 using json = nlohmann::json;
 ConfigurationParser::ConfigurationParser() {}

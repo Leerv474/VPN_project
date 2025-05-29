@@ -39,24 +39,24 @@ services:
       vpn_net:
         ipv4_address: 172.28.0.20
 
-  vpn_client2:
-    container_name: vpn_client2
-    build: .
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-      - NET_RAW
-    devices:
-      - "/dev/net/tun:/dev/net/tun"
-    privileged: true
-    volumes:
-      - ./client-config-2.json:/app/config.json
-    command: /bin/sh -c "./vpn config /app/config.json && ./vpn run"
-    stdin_open: true
-    tty: true
-    networks:
-      vpn_net:
-        ipv4_address: 172.28.0.30
+  # vpn_client2:
+  #   container_name: vpn_client2
+  #   build: .
+  #   cap_add:
+  #     - NET_ADMIN
+  #     - SYS_MODULE
+  #     - NET_RAW
+  #   devices:
+  #     - "/dev/net/tun:/dev/net/tun"
+  #   privileged: true
+  #   volumes:
+  #     - ./client-config-2.json:/app/config.json
+  #   command: /bin/sh -c "./vpn config /app/config.json && ./vpn run"
+  #   stdin_open: true
+  #   tty: true
+  #   networks:
+  #     vpn_net:
+  #       ipv4_address: 172.28.0.30
 
 networks:
   vpn_net:
