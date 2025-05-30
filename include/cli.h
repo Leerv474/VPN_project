@@ -1,15 +1,14 @@
 #pragma once
-#include <iostream>
-#include <map>
-#include "../include/util.h"
-#include "../include/configuration_parser.h"
-#include "../include/vpn_client.h"
-#include "../include/vpn_server.h"
+#include "configuration_parser.h"
+#include "vpn_client.h"
+#include "vpn_server.h"
+#include "util.h"
 #include <filesystem>
 #include <fstream>
+#include <iostream>
+#include <map>
 #include <stdexcept>
 #include <string>
-
 
 class Cli {
   public:
@@ -27,6 +26,4 @@ class Cli {
     std::string argument;
     const std::string helpCmd = "--- help ---\n> config <config_path> - set config path\n> genKeys - generate "
                                 "encryption keys\n> run - run vpn with current configuration";
-
-    Util util;
 };

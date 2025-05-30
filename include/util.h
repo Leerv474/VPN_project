@@ -1,4 +1,5 @@
 #pragma once
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <openssl/err.h>
@@ -11,8 +12,12 @@
 
 class Util {
   public:
-    std::pair<std::string, int> splitBy(const std::string& string, const char& separator);
-    std::string base64Encode(const std::vector<uint8_t>& data);
-    std::pair<std::string, std::string> generateKeyPairBase64();
-    void printHex(const std::vector<uint8_t>& data, const std::string& label);
+    static std::pair<std::string, int> splitBy(const std::string& string, const char& separator);
+    static std::pair<std::string, std::string> generateKeyPairBase64();
+    static void printHex(const std::vector<uint8_t>& data, const std::string& label);
+
+    static std::vector<uint8_t> base64Decode(const std::string& base64);
+
+  private:
+    static std::string base64Encode(const std::vector<uint8_t>& data);
 };

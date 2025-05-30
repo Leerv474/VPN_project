@@ -52,7 +52,7 @@ void Cli::setConfigPath(const std::string& configFilePath) {
 
 void Cli::generateEncryptionKeys() {
     std::pair<std::string, std::string> keys;
-    keys = util.generateKeyPairBase64();
+    keys = Util::generateKeyPairBase64();
     if (keys.first.empty() || keys.second.empty()) {
         std::cerr << "Failed to generate keys.\n";
         return;
@@ -63,7 +63,7 @@ void Cli::generateEncryptionKeys() {
 
 void Cli::startServer(std::map<std::string, std::string>& interfaceMap, std::map<std::string, std::string>& peersMap) {
     std::string address = interfaceMap["address"];
-    std::pair<std::string, int> splitAddress = util.splitBy(address, '/');
+    std::pair<std::string, int> splitAddress = Util::splitBy(address, '/');
 
     std::string tunName = "vpn_test";
     std::string tunIp = splitAddress.first;
@@ -83,9 +83,9 @@ void Cli::startServer(std::map<std::string, std::string>& interfaceMap, std::map
 
 void Cli::startClient(std::map<std::string, std::string>& interfaceMap, std::map<std::string, std::string>& peerMap) {
     std::string address = interfaceMap["address"];
-    std::pair<std::string, int> splitAddress = util.splitBy(address, '/');
+    std::pair<std::string, int> splitAddress = Util::splitBy(address, '/');
     std::string endpoint = peerMap["endpoint"];
-    std::pair<std::string, int> splitEndpoint = util.splitBy(endpoint, ':');
+    std::pair<std::string, int> splitEndpoint = Util::splitBy(endpoint, ':');
 
     std::string tunName = "vpn_test";
     std::string tunIp = splitAddress.first;

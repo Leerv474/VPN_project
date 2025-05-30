@@ -1,5 +1,4 @@
 #include "../include/util.h"
-#include <iomanip>
 
 std::pair<std::string, int> Util::splitBy(const std::string& string, const char& separator) {
     size_t pos = string.find(separator);
@@ -70,3 +69,28 @@ void Util::printHex(const std::vector<uint8_t>& data, const std::string& label) 
         std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)byte;
     std::cout << std::dec << "\n";
 }
+
+
+std::vector<uint8_t> Util::base64Decode(const std::string& base64) {
+    BIO* bio = BIO_new_mem_buf(base64.c_str(), -1);
+    BIO* b64 = BIO_new(BIO_f_base64());
+    bio = BIO_push(b64, bio);
+    BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL); // Handle single-line Base64
+
+    std::vector<uint8_t> buffer;
+    const int chunkSize = 512;
+    std::vector<uint8_t> temp(chunkSize);
+
+    int len;
+    while ((len = BIO_read(bio, temp.data(), chunkSize)) > 0) {
+        buffer.insert(buffer.end(), temp.begin(), temp.begin() + len);
+    }
+
+    BIO_free_all(bio);
+
+    if (buffer.empty()) {
+        throw std::runtime_error("Base64 decode failed or produced no data");
+    }
+    return buffer;
+}
+

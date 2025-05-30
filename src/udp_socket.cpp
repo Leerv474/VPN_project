@@ -1,5 +1,4 @@
 #include "../include/udp_socket.h"
-#include <cstdint>
 
 UdpSocket::UdpSocket() {
     this->socketFd = socket(AF_INET, SOCK_DGRAM, 0);

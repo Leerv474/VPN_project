@@ -1,10 +1,9 @@
 #include "../include/session.h"
-#include <chrono>
-#include <vector>
 
-Session::Session(const std::string& ip, uint16_t port) {
+Session::Session(const std::string& ip, const uint16_t& port, const std::string& tunIp) {
     this->deviceIp = ip;
     this->devicePort = port;
+    this->tunIp = tunIp;
 }
 
 const std::string Session::getTunIp() const { return this->tunIp; }
@@ -36,6 +35,6 @@ void Session::setChallenge(std::vector<uint8_t> challenge) { this->challenge = c
 
 std::vector<uint8_t> Session::getChallenge() const { return this->challenge; }
 
-void Session::setChallengedIp(std::string challengedIp) { this->challengedIp = challengedIp; }
+void Session::setEncryptionKey(std::vector<uint8_t> encryptionKey) { this->encryptionKey = encryptionKey; }
 
-std::string Session::getChallengedIp() const { return this->challengedIp; }
+std::vector<uint8_t> Session::getEncryptionKey() const { return this->encryptionKey; }

@@ -5,6 +5,8 @@ RUN apt update && apt install -y \
     build-essential \
     cmake \
     libssl-dev \
+    libsodium-dev \
+    pkg-config \
     nlohmann-json3-dev \
     iproute2 iputils-ping net-tools \
     libstdc++6 \

@@ -1,16 +1,11 @@
 #include "../include/vpn_client.h"
-#include <arpa/inet.h>
-#include <cstdint>
-#include <cstdio>
-#include <stdexcept>
-#include <thread>
-#include <vector>
 
 VpnClient::VpnClient(const std::string& tunName, const std::string& tunIp, const int tunNetmask,
                      const std::string& serverIp, uint16_t serverPort, size_t bufferSize, const std::string& privateKey,
                      const std::string& serverPublicKey)
     : serverIp(serverIp), serverPort(serverPort), buffer(bufferSize), bufferSize(bufferSize),
-      tunDevice(tunName, tunIp, tunNetmask), serverPublicKey(serverPublicKey), authenticator(privateKey), tunIp(tunIp) {
+      tunDevice(tunName, tunIp, tunNetmask), serverPublicKey(serverPublicKey), authenticator(privateKey),
+      privateKey(privateKey), tunIp(tunIp) {
 
     socket.bind("0.0.0.0", 0);
     epollManager.addFd(tunDevice.getFd(), EPOLLIN);
@@ -52,11 +47,24 @@ void VpnClient::eventLoop() {
 }
 
 void VpnClient::handleRead() {
-    buffer.resize(this->bufferSize);
     ssize_t len = tunDevice.readPacket(buffer.data(), buffer.size());
     if (len > 0) {
-        buffer.insert(buffer.begin(), static_cast<uint8_t>(MessageType::VPN_PACKET));
-        ssize_t nsend = socket.sendTo(buffer.data(), len + 1, serverIp, serverPort);
+        uint8_t ihl = buffer[0] & 0x0F; // IHL field is in 32-bit words
+        size_t ipHeaderLen = ihl * 4;
+
+        std::vector<uint8_t> ipHeader(buffer.begin(), buffer.begin() + ipHeaderLen);
+        std::vector<uint8_t> payload(buffer.begin() + ipHeaderLen, buffer.begin() + len);
+
+        // Encrypt payload
+        std::vector<uint8_t> encryptedPayload = Encryption::encrypt(payload, encryptionKey);
+
+        // Compose final buffer
+        std::vector<uint8_t> packet;
+        packet.push_back(static_cast<uint8_t>(MessageType::VPN_PACKET));
+        packet.insert(packet.end(), ipHeader.begin(), ipHeader.end());
+        packet.insert(packet.end(), encryptedPayload.begin(), encryptedPayload.end());
+        ssize_t nsend = socket.sendTo(packet.data(), packet.size(), serverIp, serverPort);
+        std::cout << "Data sent\n";
     }
 }
 
@@ -67,6 +75,7 @@ void VpnClient::handleSend() {
     ssize_t nrecv = socket.recvFrom(buffer.data(), buffer.size(), srcIp, srcPort);
     uint32_t vpnIp;
     ssize_t len;
+    std::vector<uint8_t> decryptedPayload;
     if (nrecv > 0) {
         MessageType type = static_cast<MessageType>(buffer[0]);
         std::vector<uint8_t> payload(buffer.begin() + 1, buffer.begin() + nrecv);
@@ -78,6 +87,7 @@ void VpnClient::handleSend() {
                 throw std::runtime_error("Client challenge failed");
             }
             std::cout << "Challenge succeeded\n";
+            this->encryptionKey = Encryption::deriveKey(this->privateKey, this->serverPublicKey);
             break;
         case MessageType::SERVER_CHALLENGE:
             buffer = authenticator.signChallenge(payload);
@@ -88,7 +98,8 @@ void VpnClient::handleSend() {
             socket.sendTo(buffer.data(), buffer.size(), this->serverIp, this->serverPort);
             break;
         case MessageType::VPN_PACKET:
-            len = tunDevice.writePacket(payload.data(), nrecv);
+            decryptedPayload = Encryption::decrypt(payload, this->encryptionKey);
+            tunDevice.writePacket(decryptedPayload.data(), nrecv - 1);
             if (len <= 0) {
                 std::cout << "Failed to write data to TUN\n";
             }

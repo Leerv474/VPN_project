@@ -1,12 +1,13 @@
 #pragma once
-#include "../include/epoll_manager.h"
-#include "../include/message_type.h"
-#include "../include/session_manager.h"
-#include "../include/udp_socket.h"
-#include "../include/vpn_tunnel.h"
 #include "authenticator.h"
-#include "util.h"
+#include "epoll_manager.h"
+#include "message_type.h"
+#include "session_manager.h"
+#include "udp_socket.h"
+#include "vpn_tunnel.h"
+#include "encryption.h"
 #include <arpa/inet.h>
+#include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <map>
@@ -33,14 +34,15 @@ class VpnServer {
     void handleTunRead();
     void handleUdpRead();
     void acceptClient();
+    std::string toStringRawIp(const uint32_t& rawIp);
 
     UdpSocket socket;
     TunDevice tunDevice;
     EpollManager epollManager;
     SessionManager sessionManager;
     Authenticator authenticator;
-    Util util;
 
+    std::string privateKey;
     std::map<std::string, std::string> peersMap;
 
     std::vector<uint8_t> buffer;

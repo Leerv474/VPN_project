@@ -1,4 +1,5 @@
 #pragma once
+#include "util.h"
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
@@ -25,7 +26,6 @@ class Authenticator {
                          const std::vector<uint8_t>& signature);
 
   private:
-    std::vector<uint8_t> base64Decode(const std::string& base64);
     void loadPrivateKey(const std::string& privateKey);
     EVP_PKEY* loadPublicKey(const std::string& publicKey);
 

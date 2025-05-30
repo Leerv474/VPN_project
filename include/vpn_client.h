@@ -1,14 +1,19 @@
 #pragma once
-#include <iostream>
-#include <string>
-#include <vector>
 
 #include "authenticator.h"
 #include "epoll_manager.h"
-#include "udp_socket.h"
-#include "util.h"
-#include "vpn_tunnel.h"
 #include "message_type.h"
+#include "udp_socket.h"
+#include "vpn_tunnel.h"
+#include "encryption.h"
+#include <arpa/inet.h>
+#include <cstdint>
+#include <cstdio>
+#include <iostream>
+#include <stdexcept>
+#include <string>
+#include <thread>
+#include <vector>
 
 class VpnClient {
   public:
@@ -26,13 +31,14 @@ class VpnClient {
     TunDevice tunDevice;
     EpollManager epollManager;
     Authenticator authenticator;
-    Util util;
 
     std::string serverIp;
     uint16_t serverPort;
     const std::string tunIp;
     const std::string serverPublicKey;
     std::vector<uint8_t> challenge;
+    std::vector<uint8_t> encryptionKey;
+    std::string privateKey;
 
     std::vector<uint8_t> buffer;
     size_t bufferSize;

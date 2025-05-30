@@ -1,14 +1,10 @@
 #include "../include/vpn_server.h"
-#include <cstdint>
-#include <iomanip>
-#include <sys/types.h>
-#include <vector>
 
 VpnServer::VpnServer(const std::string& tunName, const std::string& tunIp, int tunNetmask, int port, size_t bufferSize,
                      std::map<std::string, std::string>& peersMap, const std::string& privateKey)
     : socket(), tunDevice(tunName, tunIp, tunNetmask), epollManager(), sessionManager(), buffer(bufferSize),
       bufferSize(bufferSize), payload(bufferSize), payloadSize(bufferSize), authenticator(privateKey),
-      peersMap(peersMap) {
+      peersMap(peersMap), privateKey(privateKey) {
     socket.bind("0.0.0.0", port);
     socket.setNonBlocking();
 
@@ -47,7 +43,10 @@ void VpnServer::eventLoop() {
 void VpnServer::handleUdpRead() {
     std::string clientIp;
     uint16_t clientPort;
-    ssize_t nrecv = socket.recvFrom(buffer.data(), bufferSize, clientIp, clientPort);
+    std::vector<uint8_t> challenge;
+    ssize_t nsend;
+
+    ssize_t nrecv = socket.recvFrom(buffer.data(), buffer.size(), clientIp, clientPort);
     if (nrecv <= 0)
         return;
 
@@ -58,9 +57,13 @@ void VpnServer::handleUdpRead() {
 
     MessageType type = static_cast<MessageType>(buffer[0]);
     uint32_t rawSrcIp;
+    std::vector<uint8_t> ipHeader;
     if (type == MessageType::VPN_PACKET) {
+        uint8_t ihl = buffer[1] & 0x0F; // IHL field is in 32-bit words
+        size_t ipHeaderLen = ihl * 4;
         rawSrcIp = *reinterpret_cast<uint32_t*>(buffer.data() + 13);
-        payload = std::vector(buffer.begin() + 1, buffer.begin() + nrecv);
+        payload = std::vector(buffer.begin() + ipHeaderLen + 1, buffer.begin() + nrecv);
+        ipHeader = std::vector(buffer.begin() + 1, buffer.begin() + 1 + ipHeaderLen);
     } else {
         rawSrcIp = *reinterpret_cast<uint32_t*>(buffer.data() + 1);
         payload = std::vector(buffer.begin() + 5, buffer.begin() + nrecv);
@@ -68,51 +71,41 @@ void VpnServer::handleUdpRead() {
 
     auto session = sessionManager.getOrCreateSession(rawSrcIp, clientIp, clientPort);
 
-    struct in_addr ip_addr;
-    ip_addr.s_addr = rawSrcIp;
-
-    char str[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &ip_addr, str, INET_ADDRSTRLEN);
-    std::string ipStr(str);
-
-    std::vector<uint8_t> challenge;
-    ssize_t nsend;
-
     bool unchallenged = !session->isVarified() && !session->isTimedOut() && session->getChallenge().empty();
-    if (type == MessageType::CLIENT_CHALLENGE) {
-        challenge = authenticator.generateChallenge();
-        session->setChallenge(challenge);
-        session->setTimeoutStamp();
-        session->setChallengedIp(ipStr);
-        challenge.insert(challenge.begin(), static_cast<uint8_t>(MessageType::SERVER_CHALLENGE));
-        nsend = socket.sendTo(challenge.data(), challenge.size(), clientIp, clientPort);
-        if (nsend <= 0) {
-            perror("Failed to send authentication challenge");
-        }
-    }
 
     switch (type) {
     case MessageType::CLIENT_CHALLENGE:
+        if (unchallenged) {
+            challenge = authenticator.generateChallenge();
+            session->setChallenge(challenge);
+            session->setTimeoutStamp();
+            challenge.insert(challenge.begin(), static_cast<uint8_t>(MessageType::SERVER_CHALLENGE));
+            nsend = socket.sendTo(challenge.data(), challenge.size(), clientIp, clientPort);
+            if (nsend <= 0) {
+                perror("Failed to send authentication challenge");
+            }
+        }
         payload = authenticator.signChallenge(payload);
         payload.insert(payload.begin(), static_cast<uint8_t>(MessageType::SERVER_RESPONSE));
         socket.sendTo(payload.data(), payload.size(), clientIp, clientPort);
         break;
     case MessageType::CLIENT_RESPONSE:
-        if (!authenticator.verifyChallenge(this->peersMap[session->getChallengedIp()], session->getChallenge(),
-                                           payload)) {
+        if (!authenticator.verifyChallenge(this->peersMap[session->getTunIp()], session->getChallenge(), payload)) {
             std::cout << "Server challenge failed\n";
-            std::cout << this->peersMap[session->getChallengedIp()] << '\n';
             session->setTimeoutStamp();
         } else {
+            session->setEncryptionKey(Encryption::deriveKey(this->privateKey, this->peersMap[session->getTunIp()]));
             session->setVarified(true);
             std::cout << "Challenge succeeded\n";
         }
         break;
     case MessageType::VPN_PACKET:
         if (session->isVarified()) {
-            ssize_t len = tunDevice.writePacket(payload.data(), nrecv - 1);
+            std::vector<uint8_t> decryptedPacket = Encryption::decrypt(payload, session->getEncryptionKey());
+            decryptedPacket.insert(decryptedPacket.begin(), ipHeader.begin(), ipHeader.end());
+            ssize_t len = tunDevice.writePacket(decryptedPacket.data(), nrecv);
+            std::cout << "Routed packet\n";
 
-            uint16_t totalLength = ntohs(*reinterpret_cast<uint16_t*>(payload.data() + 2));
             if (len <= 0) {
                 std::cout << "Failed to write data to tun device\n";
             }
@@ -141,6 +134,8 @@ void VpnServer::handleTunRead() {
 
     session->updateLastActivity();
 
-    buffer.insert(buffer.begin(), static_cast<uint8_t>(MessageType::VPN_PACKET));
-    socket.sendTo(buffer.data(), bytes + 1, session->getIp(), session->getPort());
+    std::vector<uint8_t> encryptedBuffer =
+        Encryption::encrypt(std::vector(buffer.begin(), buffer.begin() + bytes), session->getEncryptionKey());
+    encryptedBuffer.insert(encryptedBuffer.begin(), static_cast<uint8_t>(MessageType::VPN_PACKET));
+    socket.sendTo(encryptedBuffer.data(), encryptedBuffer.size(), session->getIp(), session->getPort());
 }

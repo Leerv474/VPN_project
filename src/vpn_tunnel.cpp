@@ -1,5 +1,4 @@
 #include "../include/vpn_tunnel.h"
-#include <cstdint>
 
 #define TUN_DEVICE "/dev/net/tun"
 
