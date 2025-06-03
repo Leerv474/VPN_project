@@ -28,6 +28,7 @@ void VpnServer::eventLoop() {
     while (keepAlive) {
         int n = epollManager.wait(events, MAX_EVENTS, -1);
 
+        sessionManager.removeInactiveSessions(std::chrono::seconds(900));
         for (int i = 0; i < n; ++i) {
             int fd = events[i].data.fd;
 
@@ -71,7 +72,7 @@ void VpnServer::handleUdpRead() {
 
     auto session = sessionManager.getOrCreateSession(rawSrcIp, clientIp, clientPort);
 
-    bool unchallenged = !session->isVarified() && !session->isTimedOut() && session->getChallenge().empty();
+    bool unchallenged = !session->isVarified() && !session->isTimedOut();
 
     switch (type) {
     case MessageType::CLIENT_CHALLENGE:
@@ -91,7 +92,7 @@ void VpnServer::handleUdpRead() {
         break;
     case MessageType::CLIENT_RESPONSE:
         if (!authenticator.verifyChallenge(this->peersMap[session->getTunIp()], session->getChallenge(), payload)) {
-            std::cout << "Server challenge failed\n";
+            std::cerr << "Server challenge failed\n";
             session->setTimeoutStamp();
         } else {
             session->setEncryptionKey(Encryption::deriveKey(this->privateKey, this->peersMap[session->getTunIp()]));
@@ -101,18 +102,25 @@ void VpnServer::handleUdpRead() {
         break;
     case MessageType::VPN_PACKET:
         if (session->isVarified()) {
-            std::vector<uint8_t> decryptedPacket = Encryption::decrypt(payload, session->getEncryptionKey());
-            decryptedPacket.insert(decryptedPacket.begin(), ipHeader.begin(), ipHeader.end());
-            ssize_t len = tunDevice.writePacket(decryptedPacket.data(), nrecv);
+            decryptionBuffer = Encryption::decrypt(payload, session->getEncryptionKey());
+            decryptionBuffer.insert(decryptionBuffer.begin(), ipHeader.begin(), ipHeader.end());
+            ssize_t len = tunDevice.writePacket(decryptionBuffer.data(), nrecv);
             std::cout << "Routed packet\n";
 
             if (len <= 0) {
-                std::cout << "Failed to write data to tun device\n";
+                std::cerr << "Failed to write data to tun device\n";
+            }
+        } else {
+            buffer.clear();
+            buffer.push_back(static_cast<uint8_t>(MessageType::ACCESS_DECLINED));
+            ssize_t nsend = socket.sendTo(buffer.data(), 10, clientIp, clientPort);
+            if (nsend <= 0) {
+                std::cerr << "Failed to send data to client\n";
             }
         }
         break;
     default:
-        std::cout << "Uknown package type\n";
+        std::cerr << "Uknown package type\n";
         break;
     }
 }
@@ -120,7 +128,7 @@ void VpnServer::handleUdpRead() {
 void VpnServer::handleTunRead() {
     ssize_t bytes = tunDevice.readPacket(buffer.data(), buffer.size());
     if (bytes <= 0) {
-        std::cout << "Failed to read data from tun device\n";
+        std::cerr << "Failed to read data from tun device\n";
         return;
     }
 
@@ -128,14 +136,15 @@ void VpnServer::handleTunRead() {
 
     auto session = sessionManager.findSessionByVpnIp(rawDstIp);
     if (!session) {
-        std::cout << "Failed to find session " << rawDstIp << " Sized at: " << bytes << '\n';
+        std::cerr << "Failed to find session " << rawDstIp << " Sized at: " << bytes << '\n';
         return;
     }
 
     session->updateLastActivity();
 
-    std::vector<uint8_t> encryptedBuffer =
+    encryptionBuffer =
         Encryption::encrypt(std::vector(buffer.begin(), buffer.begin() + bytes), session->getEncryptionKey());
-    encryptedBuffer.insert(encryptedBuffer.begin(), static_cast<uint8_t>(MessageType::VPN_PACKET));
-    socket.sendTo(encryptedBuffer.data(), encryptedBuffer.size(), session->getIp(), session->getPort());
+    encryptionBuffer.insert(encryptionBuffer.begin(), static_cast<uint8_t>(MessageType::VPN_PACKET));
+    socket.sendTo(encryptionBuffer.data(), encryptionBuffer.size(), session->getIp(), session->getPort());
+    std::cout << "Data send back\n";
 }

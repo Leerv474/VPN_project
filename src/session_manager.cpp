@@ -20,8 +20,11 @@ std::shared_ptr<Session> SessionManager::findSessionByVpnIp(const uint32_t& rawV
 }
 
 void SessionManager::removeInactiveSessions(std::chrono::seconds timeout) {
-    std::lock_guard<std::mutex> lock(mutex);
     auto now = std::chrono::steady_clock::now();
+    if (now - lastCleanUp <= std::chrono::seconds(900)) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(mutex);
 
     for (auto it = sessions.begin(); it != sessions.end();) {
         if (now - it->second->getLastActivity() > timeout) {

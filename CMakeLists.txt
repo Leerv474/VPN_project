@@ -12,7 +12,7 @@ pkg_check_modules(SODIUM REQUIRED libsodium)
 
 add_executable(vpn
     src/main.cpp
-    src/vpn_tunnel.cpp
+    src/tun_device.cpp
     src/vpn_server.cpp
     src/vpn_client.cpp
     src/udp_socket.cpp

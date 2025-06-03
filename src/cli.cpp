@@ -48,6 +48,7 @@ void Cli::setConfigPath(const std::string& configFilePath) {
 
     out << configFilePath;
     out.close();
+    std::cout << "Configuration path \"" << fullPath.c_str() << "\" successfully set\n";
 }
 
 void Cli::generateEncryptionKeys() {
@@ -57,8 +58,8 @@ void Cli::generateEncryptionKeys() {
         std::cerr << "Failed to generate keys.\n";
         return;
     }
-    std::cout << "Private Key:\n" << keys.first << "\n";
-    std::cout << "Public Key:\n" << keys.second<< "\n";
+    std::cout << "Private Key:\n" << keys.first << "\n\n";
+    std::cout << "Public Key:\n" << keys.second<< "\n\n";
 }
 
 void Cli::startServer(std::map<std::string, std::string>& interfaceMap, std::map<std::string, std::string>& peersMap) {

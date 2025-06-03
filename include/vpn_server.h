@@ -4,7 +4,7 @@
 #include "message_type.h"
 #include "session_manager.h"
 #include "udp_socket.h"
-#include "vpn_tunnel.h"
+#include "tun_device.h"
 #include "encryption.h"
 #include <arpa/inet.h>
 #include <cstdint>
@@ -47,6 +47,8 @@ class VpnServer {
 
     std::vector<uint8_t> buffer;
     size_t bufferSize;
+    std::vector<uint8_t> decryptionBuffer;
+    std::vector<uint8_t> encryptionBuffer;
 
     std::vector<uint8_t> payload;
     size_t payloadSize;

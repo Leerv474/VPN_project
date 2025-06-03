@@ -1,9 +1,9 @@
-#include "../include/vpn_tunnel.h"
+#include "../include/tun_device.h"
 
 #define TUN_DEVICE "/dev/net/tun"
 
-TunDevice::TunDevice(const std::string& tunName, const std::string& tunIp, const int tunNetmask)
-    : tunName(tunName), tunFd(-1), tunNetmask(tunNetmask) {
+TunDevice::TunDevice(const std::string& tunName, const std::string& tunIp, const int tunNetmask, bool setDefaultRoute)
+    : tunName(tunName), tunFd(-1), tunNetmask(tunNetmask), setDefaultRoute(setDefaultRoute) {
     struct ifreq ifr; // interface request structure
     memset(&ifr, 0, sizeof(ifr));
     this->tunFd = open(TUN_DEVICE, O_RDWR);
@@ -59,17 +59,41 @@ std::string TunDevice::calculateNetworkAddress(const std::string& ipStr, int pre
     return std::string(buf);
 }
 
+std::string TunDevice::getDefaultGateway() {
+    std::ifstream routeFile("/proc/net/route");
+    std::string line, iface, destination, gateway;
+    while (std::getline(routeFile, line)) {
+        std::istringstream ss(line);
+        ss >> iface >> destination >> gateway;
+        if (destination == "00000000") {
+            unsigned long gw;
+            std::stringstream converter;
+            converter << std::hex << gateway;
+            converter >> gw;
+
+            struct in_addr addr;
+            addr.s_addr = gw;
+            return inet_ntoa(addr);
+        }
+    }
+    return "";
+}
+
 bool TunDevice::configure(const std::string& tunIp, const int tunNetmask) {
     std::string networkBase = calculateNetworkAddress(tunIp, tunNetmask);
     const std::string ipSetupCmd = "ip addr add " + tunIp + "/" + std::to_string(tunNetmask) + " dev " + this->tunName;
-    const std::string disableIpv6Cmd  = "sysctl -w net.ipv6.conf." + this->tunName + ".disable_ipv6=1";
+    const std::string disableIpv6Cmd = "sysctl -w net.ipv6.conf." + this->tunName + ".disable_ipv6=1";
     const std::string linkSetCmd = "ip link set dev " + this->tunName + " up";
     const std::string ipForwardingCmd = "sysctl -w net.ipv4.ip_forward=1";
     const std::string forwardingSetupCmd = "iptables -A FORWARD -i vpn_test -j ACCEPT";
-    const std::string natSetupCmd = "iptables -t nat -A POSTROUTING -s " + networkBase + "/" + std::to_string(tunNetmask) + " -o " +
-                                    this->getDefaultInterface() + " -j MASQUERADE";
-    const std::string ipRoutingCmd = "ip route replace " + networkBase + "/" + std::to_string(tunNetmask) + " dev " + this->tunName;
-
+    const std::string natSetupCmd = "iptables -t nat -A POSTROUTING -s " + networkBase + "/" +
+                                    std::to_string(tunNetmask) + " -o " + this->getDefaultInterface() +
+                                    " -j MASQUERADE";
+    const std::string ipRoutingCmd =
+        "ip route replace " + networkBase + "/" + std::to_string(tunNetmask) + " dev " + this->tunName;
+    const std::string delExistingDefaultRouteCmd = "ip route del default";
+    const std::string changeDefaultRouteCmd = "ip route add default via " + this->getDefaultGateway() + " dev " + this->getDefaultInterface() + " metric 100";
+    const std::string addDefaultRouteCmd = "ip route add default dev " + this->tunName + " metric 10";
 
     if (system(ipSetupCmd.c_str()) != 0) {
         std::cout << "CONFIGURATION FAILED: " << ipSetupCmd << '\n';
@@ -80,7 +104,7 @@ bool TunDevice::configure(const std::string& tunIp, const int tunNetmask) {
         return false;
     }
     if (system(linkSetCmd.c_str()) != 0) {
-        std::cout << "CONFIGURATION FAILED: " << linkSetCmd<< '\n';
+        std::cout << "CONFIGURATION FAILED: " << linkSetCmd << '\n';
         return false;
     }
     if (system(ipForwardingCmd.c_str()) != 0) {
@@ -98,6 +122,20 @@ bool TunDevice::configure(const std::string& tunIp, const int tunNetmask) {
     if (system(ipRoutingCmd.c_str()) != 0) {
         std::cout << "CONFIGURATION FAILED: " << ipRoutingCmd << '\n';
         return false;
+    }
+    if (this->setDefaultRoute) {
+        if (system(delExistingDefaultRouteCmd.c_str()) != 0) {
+            std::cout << "CONFIGURATION FAILED: " << delExistingDefaultRouteCmd << '\n';
+            return false;
+        }
+        if (system(changeDefaultRouteCmd.c_str()) != 0) {
+            std::cout << "CONFIGURATION FAILED: " << changeDefaultRouteCmd << '\n';
+            return false;
+        }
+        if (system(addDefaultRouteCmd.c_str()) != 0) {
+            std::cout << "CONFIGURATION FAILED: " << addDefaultRouteCmd << '\n';
+            return false;
+        }
     }
 
     return true;
@@ -152,14 +190,15 @@ std::string TunDevice::getDefaultInterface() {
 }
 
 bool TunDevice::removeIpTablesRules() {
-    std::string disablePostroutingRules = "iptables -t nat -D POSTROUTING -o " + this->getDefaultInterface() + " -j MASQUERADE";
+    std::string disablePostroutingRules =
+        "iptables -t nat -D POSTROUTING -o " + this->getDefaultInterface() + " -j MASQUERADE";
     std::string disableForwardingRules = "iptables -D FORWARD -i " + this->tunName + " -j ACCEPT;";
     if (system(disableForwardingRules.c_str()) != 0) {
         std::cout << "CONFIGURATION FAILED: " << disableForwardingRules << '\n';
         return false;
     }
     if (system(disablePostroutingRules.c_str()) != 0) {
-        std::cout << "CONFIGURATION FAILED: " << disablePostroutingRules<< '\n';
+        std::cout << "CONFIGURATION FAILED: " << disablePostroutingRules << '\n';
         return false;
     }
     return true;

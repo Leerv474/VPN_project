@@ -4,7 +4,7 @@
 #include "epoll_manager.h"
 #include "message_type.h"
 #include "udp_socket.h"
-#include "vpn_tunnel.h"
+#include "tun_device.h"
 #include "encryption.h"
 #include <arpa/inet.h>
 #include <cstdint>
@@ -24,8 +24,10 @@ class VpnClient {
     void eventLoop();
 
   private:
-    void handleRead();
-    void handleSend();
+    void handleTunRead();
+    void handleUdpRead();
+
+    void sendChallenge();
 
     UdpSocket socket;
     TunDevice tunDevice;
@@ -41,6 +43,9 @@ class VpnClient {
     std::string privateKey;
 
     std::vector<uint8_t> buffer;
+    std::vector<uint8_t> payload;
     size_t bufferSize;
+    std::vector<uint8_t> decryptionBuffer;
+    std::vector<uint8_t> encryptionBuffer;
     bool runEventLoop = true;
 };
